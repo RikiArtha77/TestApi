@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart';
+import 'package:tesapi/Models/datanimodel.dart'; // asumsi model Petani disini
 
 class PetaniForm extends StatefulWidget {
+  final Petani? petani; // null jika tambah, berisi data jika edit
+
+  const PetaniForm({Key? key, this.petani}) : super(key: key);
+
   @override
   _PetaniFormState createState() => _PetaniFormState();
 }
@@ -18,6 +23,17 @@ class _PetaniFormState extends State<PetaniForm> {
 
   File? _image;
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.petani != null) {
+      namaController.text = widget.petani!.nama;
+      nikController.text = widget.petani!.nik;
+      alamatController.text = widget.petani!.alamat;
+      telpController.text = widget.petani!.telp;
+    }
+  }
 
   Future<void> _pickImage() async {
     try {
@@ -34,21 +50,25 @@ class _PetaniFormState extends State<PetaniForm> {
     } catch (e, stack) {
       print('Error picking image: $e');
       print(stack);
-      if (mounted) {
-      }
     }
   }
 
   Future<void> _submitForm(BuildContext context) async {
-    if (!_formKey.currentState!.validate()) {
-      print('Form tidak valid');
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+
+    final isEdit = widget.petani != null;
+    final uri = isEdit
+        ? Uri.parse("https://dev.wefgis.com/api/petani/${widget.petani!.idPenjual}")
+        : Uri.parse("https://dev.wefgis.com/api/petani");
 
     try {
-      print('Mulai submit form...');
-      var uri = Uri.parse("https://dev.wefgis.com/api/petani");
       var request = http.MultipartRequest("POST", uri);
+      request.headers['Authorization'] =
+          "Bearer 8|x6bKsHp9STb0uLJsM11GkWhZEYRWPbv0IqlXvFi7";
+
+      if (isEdit) {
+        request.fields['_method'] = 'PUT';
+      }
 
       request.fields['id_penjual'] = "127";
       request.fields['id_kelompok_tani'] = "4";
@@ -68,35 +88,30 @@ class _PetaniFormState extends State<PetaniForm> {
           filename: basename(_image!.path),
         );
         request.files.add(multipartFile);
-        print('File foto ditambahkan: ${basename(_image!.path)}, size: $length bytes');
-      } else {
-        print('Tidak ada file foto yang diupload');
       }
 
-      print('Mengirim request ke server...');
       var response = await request.send();
-
-      print('Response status: ${response.statusCode}');
       var responseBody = await response.stream.bytesToString();
-      print('Response body: $responseBody');
 
       if (!mounted) return;
 
-      if (response.statusCode == 201) {
+      if (response.statusCode == 201 || response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Data berhasil dikirim")),
+          SnackBar(content: Text(isEdit ? "Data berhasil diperbarui" : "Data berhasil ditambahkan")),
         );
+        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Gagal mengirim data: ${response.statusCode}")),
         );
+        print(responseBody);
       }
     } catch (e, stack) {
       print('Exception saat submit form: $e');
       print(stack);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Terjadi kesalahan saat mengirim data: $e')),
+          SnackBar(content: Text('Terjadi kesalahan: $e')),
         );
       }
     }
@@ -113,8 +128,10 @@ class _PetaniFormState extends State<PetaniForm> {
 
   @override
   Widget build(BuildContext context) {
+    final isEdit = widget.petani != null;
+
     return Scaffold(
-      appBar: AppBar(title: Text('Form Petani')),
+      appBar: AppBar(title: Text(isEdit ? 'Edit Petani' : 'Tambah Petani')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -139,21 +156,21 @@ class _PetaniFormState extends State<PetaniForm> {
                 controller: telpController,
                 decoration: InputDecoration(labelText: "Telepon"),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _pickImage,
-                icon: Icon(Icons.image),
-                label: Text("Pilih Foto"),
+                icon: const Icon(Icons.image),
+                label: const Text("Pilih Foto"),
               ),
               if (_image != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Image.file(_image!, height: 150),
                 ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => _submitForm(context),
-                child: Text("Kirim"),
+                child: Text(isEdit ? "Update" : "Kirim"),
               ),
             ],
           ),

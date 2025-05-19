@@ -14,19 +14,26 @@ class PagePetani extends StatefulWidget {
 class _PagePetaniState extends State<PagePetani> {
   static const _pageSize = 10;
 
-  final PagingController<int, Petani> _pagingController = PagingController(firstPageKey: 1);
+  final PagingController<int, Petani> _pagingController =
+      PagingController(firstPageKey: 1);
 
   @override
   void initState() {
     super.initState();
-    _pagingController.addPageRequestListener((pageKey) async {
-      await _fetchPage(pageKey);
+    _pagingController.addPageRequestListener((pageKey) {
+      _fetchPage(pageKey);
     });
   }
 
   Future<void> _fetchPage(int pageKey) async {
     try {
-      final newItems = await ApiStatic.getPetaniFilter(pageKey, '', 'Y', pageSize: _pageSize);
+      final newItems = await ApiStatic.getPetaniFilter(
+        pageKey,
+        '', // search
+        'Y', // status
+        pageSize: _pageSize,
+      );
+
       final isLastPage = newItems.length < _pageSize;
 
       if (isLastPage) {
@@ -40,25 +47,38 @@ class _PagePetaniState extends State<PagePetani> {
     }
   }
 
-  @override
-  void dispose() {
-    _pagingController.dispose();
-    super.dispose();
+  Future<void> _deletePetani(String idPenjual) async {
+    final result = await ApiStatic.deletePetani(idPenjual);
+    if (!mounted) return;
+
+    if (result) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Data berhasil dihapus')),
+      );
+      _pagingController.refresh();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal menghapus data')),
+      );
+    }
   }
 
   Widget _buildPetaniItem(Petani petani) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: ListTile(
-        leading: petani.foto.isNotEmpty
-            ? Image.network(
-                petani.foto,
-                width: 60,
-                height: 60,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.person),
-              )
-            : const Icon(Icons.person, size: 60),
+        leading: ClipOval(
+          child: petani.foto.isNotEmpty
+              ? Image.network(
+                  petani.foto,
+                  width: 60,
+                  height: 60,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.person),
+                )
+              : const Icon(Icons.person, size: 60),
+        ),
         title: Text(petani.nama.isNotEmpty ? petani.nama : 'Nama tidak tersedia'),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,35 +87,80 @@ class _PagePetaniState extends State<PagePetani> {
             Text('Alamat: ${petani.alamat.isNotEmpty ? petani.alamat : "-"}'),
           ],
         ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'edit') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PetaniForm(petani: petani),
+                ),
+              ).then((_) => _pagingController.refresh());
+            } else if (value == 'delete') {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text("Konfirmasi"),
+                  content: const Text("Yakin ingin menghapus data ini?"),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("Batal"),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _deletePetani(petani.idPenjual.toString());
+                      },
+                      child: const Text("Hapus", style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'edit', child: Text('Edit')),
+            PopupMenuItem(value: 'delete', child: Text('Hapus')),
+          ],
+        ),
       ),
     );
   }
 
   @override
+  void dispose() {
+    _pagingController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Daftar Petani'),
-      ),
-      body: PagedListView<int, Petani>(
-        pagingController: _pagingController,
-        builderDelegate: PagedChildBuilderDelegate<Petani>(
-          itemBuilder: (context, petani, index) => _buildPetaniItem(petani),
-          firstPageErrorIndicatorBuilder: (context) => Center(
-            child: Text('Gagal memuat data, silakan coba lagi'),
-          ),
-          noItemsFoundIndicatorBuilder: (context) => Center(
-            child: Text('Tidak ada data petani'),
+      appBar: AppBar(title: const Text('Daftar Petani')),
+      body: RefreshIndicator(
+        onRefresh: () => Future.sync(() => _pagingController.refresh()),
+        child: PagedListView<int, Petani>(
+          pagingController: _pagingController,
+          builderDelegate: PagedChildBuilderDelegate<Petani>(
+            itemBuilder: (context, petani, index) => _buildPetaniItem(petani),
+            firstPageProgressIndicatorBuilder: (_) =>
+                const Center(child: CircularProgressIndicator()),
+            newPageProgressIndicatorBuilder: (_) =>
+                const Center(child: CircularProgressIndicator()),
+            firstPageErrorIndicatorBuilder: (context) =>
+                const Center(child: Text('Gagal memuat data')),
+            noItemsFoundIndicatorBuilder: (context) =>
+                const Center(child: Text('Tidak ada data petani')),
           ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Navigasi ke halaman form tambah
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => PetaniForm()),
-          );
+            MaterialPageRoute(builder: (context) => const PetaniForm()),
+          ).then((_) => _pagingController.refresh());
         },
         child: const Icon(Icons.add),
         tooltip: 'Tambah Petani',
