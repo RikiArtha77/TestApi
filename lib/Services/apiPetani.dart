@@ -1,16 +1,11 @@
 import 'dart:convert';
 import 'package:tesapi/Models/datanimodel.dart';
 import 'package:http/http.dart' as http;
+import 'package:tesapi/Models/kelompok.dart';
 
 class ApiStatic {
   static final String host = 'https://dev.wefgis.com';
   static String _token = "8|x6bKsHp9STb0uLJsM11GkWhZEYRWPbv0IqlXvFi7";
-
-  /// Mengambil list Petani dengan pagination dan filter.
-  /// [pageKey]: halaman saat ini (mulai dari 1)
-  /// [_s]: keyword pencarian (kosongkan jika tidak ada)
-  /// [_selectedChoice]: status publish, misal "Y"
-  /// [pageSize]: jumlah data per halaman
   static Future<List<Petani>> getPetaniFilter(
     int pageKey,
     String _s,
@@ -54,6 +49,25 @@ class ApiStatic {
       return [];
     }
   }
+
+  static Future<List<Kelompok>> getKelompokTani() async{
+    try {
+      final response= await http.get(Uri.parse("$host/api/kelompoktani"),
+      headers: {
+        'Authorization':'Bearer '+_token,
+      });
+      if (response.statusCode==200) {
+        var json=jsonDecode(response.body);
+        final parsed=json.cast<Map<String, dynamic>>();
+        return parsed.map<Kelompok>((json)=>Kelompok.fromJson(json)).toList();
+      } else{
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
 
   /// Menghapus data Petani berdasarkan [id].
   /// Kembalikan true jika berhasil, false jika gagal.

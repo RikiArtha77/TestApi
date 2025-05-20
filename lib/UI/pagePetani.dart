@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:tesapi/Models/datanimodel.dart';
-import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:tesapi/Services/apiPetani.dart';
 import 'package:tesapi/UI/petani_form.dart';
 
@@ -12,41 +11,63 @@ class PagePetani extends StatefulWidget {
 }
 
 class _PagePetaniState extends State<PagePetani> {
-  static const _pageSize = 10;
-
-  final PagingController<int, Petani> _pagingController =
-      PagingController(firstPageKey: 1);
+  static const int _pageSize = 10;
+  int _currentPage = 1;
+  List<Petani> _petaniList = [];
+  bool _isLastPage = false;
+  bool _isLoading = false;
 
   String _searchQuery = '';
   String _selectedStatus = 'Y';
 
+  // Ganti sesuai dengan base URL server kamu
+  static const String baseUrl = "https://dev.wefgis.com";
+
   @override
   void initState() {
     super.initState();
-    _pagingController.addPageRequestListener((pageKey) {
-      _fetchPage(pageKey);
-    });
+    _fetchPage();
   }
 
-  Future<void> _fetchPage(int pageKey) async {
+  Future<void> _fetchPage() async {
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       final newItems = await ApiStatic.getPetaniFilter(
-        pageKey,
+        _currentPage,
         _searchQuery,
         _selectedStatus,
         pageSize: _pageSize,
       );
 
-      final isLastPage = newItems.length < _pageSize;
+      setState(() {
+        _petaniList = newItems;
+        _isLastPage = newItems.length < _pageSize;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal memuat data: $e')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
-      if (isLastPage) {
-        _pagingController.appendLastPage(newItems);
-      } else {
-        final nextPageKey = pageKey + 1;
-        _pagingController.appendPage(newItems, nextPageKey);
-      }
-    } catch (error) {
-      _pagingController.error = error;
+  void _nextPage() {
+    if (!_isLastPage) {
+      _currentPage++;
+      _fetchPage();
+    }
+  }
+
+  void _prevPage() {
+    if (_currentPage > 1) {
+      _currentPage--;
+      _fetchPage();
     }
   }
 
@@ -58,7 +79,7 @@ class _PagePetaniState extends State<PagePetani> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Data berhasil dihapus')),
       );
-      _pagingController.refresh();
+      _fetchPage();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Gagal menghapus data')),
@@ -66,19 +87,36 @@ class _PagePetaniState extends State<PagePetani> {
     }
   }
 
+  // Helper untuk gabungkan base URL dan path foto
+  String _getFullImageUrl(String fotoPath) {
+    if (fotoPath.isEmpty) return '';
+    if (fotoPath.startsWith('http')) return fotoPath;
+
+    // Tangani slash agar tidak double slash
+    if (baseUrl.endsWith('/') && fotoPath.startsWith('/')) {
+      return baseUrl + fotoPath.substring(1);
+    } else if (!baseUrl.endsWith('/') && !fotoPath.startsWith('/')) {
+      return '$baseUrl/$fotoPath';
+    } else {
+      return baseUrl + fotoPath;
+    }
+  }
+
   Widget _buildPetaniItem(Petani petani) {
+    final imageUrl = _getFullImageUrl(petani.foto);
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: ListTile(
         leading: ClipOval(
-          child: petani.foto.isNotEmpty
+          child: imageUrl.isNotEmpty
               ? Image.network(
-                  petani.foto,
+                  imageUrl,
                   width: 60,
                   height: 60,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.person),
+                      const Icon(Icons.person, size: 60),
                 )
               : const Icon(Icons.person, size: 60),
         ),
@@ -98,7 +136,7 @@ class _PagePetaniState extends State<PagePetani> {
                 MaterialPageRoute(
                   builder: (context) => PetaniForm(petani: petani),
                 ),
-              ).then((_) => _pagingController.refresh());
+              ).then((_) => _fetchPage());
             } else if (value == 'delete') {
               showDialog(
                 context: context,
@@ -132,12 +170,6 @@ class _PagePetaniState extends State<PagePetani> {
   }
 
   @override
-  void dispose() {
-    _pagingController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Daftar Petani')),
@@ -156,7 +188,8 @@ class _PagePetaniState extends State<PagePetani> {
                     ),
                     onChanged: (value) {
                       _searchQuery = value;
-                      _pagingController.refresh();
+                      _currentPage = 1;
+                      _fetchPage();
                     },
                   ),
                 ),
@@ -171,7 +204,8 @@ class _PagePetaniState extends State<PagePetani> {
                   onChanged: (value) {
                     setState(() {
                       _selectedStatus = value!;
-                      _pagingController.refresh();
+                      _currentPage = 1;
+                      _fetchPage();
                     });
                   },
                 ),
@@ -179,22 +213,34 @@ class _PagePetaniState extends State<PagePetani> {
             ),
           ),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => Future.sync(() => _pagingController.refresh()),
-              child: PagedListView<int, Petani>(
-                pagingController: _pagingController,
-                builderDelegate: PagedChildBuilderDelegate<Petani>(
-                  itemBuilder: (context, petani, index) => _buildPetaniItem(petani),
-                  firstPageProgressIndicatorBuilder: (_) =>
-                      const Center(child: CircularProgressIndicator()),
-                  newPageProgressIndicatorBuilder: (_) =>
-                      const Center(child: CircularProgressIndicator()),
-                  firstPageErrorIndicatorBuilder: (context) =>
-                      const Center(child: Text('Gagal memuat data')),
-                  noItemsFoundIndicatorBuilder: (context) =>
-                      const Center(child: Text('Tidak ada data petani')),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _petaniList.isEmpty
+                    ? const Center(child: Text('Tidak ada data petani'))
+                    : ListView.builder(
+                        itemCount: _petaniList.length,
+                        itemBuilder: (context, index) {
+                          return _buildPetaniItem(_petaniList[index]);
+                        },
+                      ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: _currentPage > 1 ? _prevPage : null,
+                  child: const Text('Previous'),
                 ),
-              ),
+                const SizedBox(width: 20),
+                Text('Page $_currentPage'),
+                const SizedBox(width: 20),
+                ElevatedButton(
+                  onPressed: !_isLastPage ? _nextPage : null,
+                  child: const Text('Next'),
+                ),
+              ],
             ),
           ),
         ],
@@ -204,7 +250,7 @@ class _PagePetaniState extends State<PagePetani> {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const PetaniForm()),
-          ).then((_) => _pagingController.refresh());
+          ).then((_) => _fetchPage());
         },
         child: const Icon(Icons.add),
         tooltip: 'Tambah Petani',
