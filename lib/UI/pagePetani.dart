@@ -17,6 +17,9 @@ class _PagePetaniState extends State<PagePetani> {
   final PagingController<int, Petani> _pagingController =
       PagingController(firstPageKey: 1);
 
+  String _searchQuery = '';
+  String _selectedStatus = 'Y';
+
   @override
   void initState() {
     super.initState();
@@ -29,8 +32,8 @@ class _PagePetaniState extends State<PagePetani> {
     try {
       final newItems = await ApiStatic.getPetaniFilter(
         pageKey,
-        '', // search
-        'Y', // status
+        _searchQuery,
+        _selectedStatus,
         pageSize: _pageSize,
       );
 
@@ -138,22 +141,63 @@ class _PagePetaniState extends State<PagePetani> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Daftar Petani')),
-      body: RefreshIndicator(
-        onRefresh: () => Future.sync(() => _pagingController.refresh()),
-        child: PagedListView<int, Petani>(
-          pagingController: _pagingController,
-          builderDelegate: PagedChildBuilderDelegate<Petani>(
-            itemBuilder: (context, petani, index) => _buildPetaniItem(petani),
-            firstPageProgressIndicatorBuilder: (_) =>
-                const Center(child: CircularProgressIndicator()),
-            newPageProgressIndicatorBuilder: (_) =>
-                const Center(child: CircularProgressIndicator()),
-            firstPageErrorIndicatorBuilder: (context) =>
-                const Center(child: Text('Gagal memuat data')),
-            noItemsFoundIndicatorBuilder: (context) =>
-                const Center(child: Text('Tidak ada data petani')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Cari Nama',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (value) {
+                      _searchQuery = value;
+                      _pagingController.refresh();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: _selectedStatus,
+                  items: const [
+                    DropdownMenuItem(value: '', child: Text('Semua')),
+                    DropdownMenuItem(value: 'Y', child: Text('Aktif')),
+                    DropdownMenuItem(value: 'N', child: Text('Tidak Aktif')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedStatus = value!;
+                      _pagingController.refresh();
+                    });
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => Future.sync(() => _pagingController.refresh()),
+              child: PagedListView<int, Petani>(
+                pagingController: _pagingController,
+                builderDelegate: PagedChildBuilderDelegate<Petani>(
+                  itemBuilder: (context, petani, index) => _buildPetaniItem(petani),
+                  firstPageProgressIndicatorBuilder: (_) =>
+                      const Center(child: CircularProgressIndicator()),
+                  newPageProgressIndicatorBuilder: (_) =>
+                      const Center(child: CircularProgressIndicator()),
+                  firstPageErrorIndicatorBuilder: (context) =>
+                      const Center(child: Text('Gagal memuat data')),
+                  noItemsFoundIndicatorBuilder: (context) =>
+                      const Center(child: Text('Tidak ada data petani')),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
